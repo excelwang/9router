@@ -202,7 +202,7 @@ async function getProviderCredentials(machineId, provider, env, excludeConnectio
 
   const [connectionId, connection] = providerConnections[0];
 
-  return {
+  const creds = {
     id: connectionId,
     apiKey: connection.apiKey,
     accessToken: connection.accessToken,
@@ -210,12 +210,22 @@ async function getProviderCredentials(machineId, provider, env, excludeConnectio
     expiresAt: connection.expiresAt,
     projectId: connection.projectId,
     copilotToken: connection.providerSpecificData?.copilotToken,
-    providerSpecificData: connection.providerSpecificData,
+    providerSpecificData: { ...connection.providerSpecificData },
     // Include current status for optimization check
     status: connection.status,
     lastError: connection.lastError,
     rateLimitedUntil: connection.rateLimitedUntil
   };
+
+  // Inject system-wide prompts if available in KV
+  if (provider === "codex" && env.KV) {
+    const systemPrompt = await env.KV.get("SYSTEM_CONFIG:codex_instructions");
+    if (systemPrompt) {
+      creds.providerSpecificData.systemInstructions = systemPrompt;
+    }
+  }
+
+  return creds;
 }
 
 async function markAccountUnavailable(machineId, connectionId, status, errorText, env) {

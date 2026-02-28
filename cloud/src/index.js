@@ -14,6 +14,7 @@ import { handleForward } from "./handlers/forward.js";
 import { handleForwardRaw } from "./handlers/forwardRaw.js";
 import { handleEmbeddings } from "./handlers/embeddings.js";
 import { createLandingPageResponse } from "./services/landingPage.js";
+import { syncPrompts } from "./services/configSync.js";
 
 // Initialize translators at module load (static imports)
 initTranslators();
@@ -33,8 +34,12 @@ function addCorsHeaders(response) {
 
 const worker = {
   async scheduled(event, env, ctx) {
-    const result = await handleCleanup(env);
-    log.info("SCHEDULED", "Cleanup completed", result);
+    // 1. Cleanup old data
+    await handleCleanup(env);
+    // 2. Sync system prompts
+    await syncPrompts(env);
+
+    log.info("SCHEDULED", "Routine tasks completed");
   },
 
   async fetch(request, env, ctx) {
@@ -91,6 +96,16 @@ const worker = {
         const response = await handleCacheClear(request, env);
         log.response(response.status, Date.now() - startTime);
         return response;
+      }
+
+      // Manual sync: prompts and other system config
+      if (path === "/config/sync" && request.method === "POST") {
+        const result = await syncPrompts(env);
+        log.response(result.success ? 200 : 500, Date.now() - startTime);
+        return new Response(JSON.stringify(result), {
+          status: result.success ? 200 : 500,
+          headers: { "Content-Type": "application/json" }
+        });
       }
 
       // Sync provider data by machineId (GET, POST, DELETE)
