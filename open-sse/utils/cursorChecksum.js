@@ -6,7 +6,7 @@
  */
 
 import crypto from "crypto";
-import { v5 as uuidv5 } from "uuid";
+import uuid from "./uuidShim.js";
 
 /**
  * Generate SHA-256 hash like generateHashed64Hex
@@ -23,8 +23,8 @@ export function generateHashed64Hex(input, salt = "") {
  * @param {string} authToken - Auth token
  * @returns {string} - UUID string
  */
-export function generateSessionId(authToken) {
-  return uuidv5(authToken, uuidv5.DNS);
+export async function generateSessionId(authToken) {
+  return await uuid.v5(authToken, uuid.DNS);
 }
 
 /**
@@ -92,7 +92,7 @@ export function generateCursorChecksum(machineId) {
  * @param {boolean} ghostMode - Enable ghost mode (privacy)
  * @returns {Object} - Headers object
  */
-export function buildCursorHeaders(accessToken, machineId = null, ghostMode = true) {
+export async function buildCursorHeaders(accessToken, machineId = null, ghostMode = true) {
   // Clean token if it has prefix
   const cleanToken = accessToken.includes("::")
     ? accessToken.split("::")[1]
@@ -102,7 +102,7 @@ export function buildCursorHeaders(accessToken, machineId = null, ghostMode = tr
   const effectiveMachineId = machineId || generateHashed64Hex(cleanToken, "machineId");
 
   // Generate derived values
-  const sessionId = generateSessionId(cleanToken);
+  const sessionId = await generateSessionId(cleanToken);
   const clientKey = generateHashed64Hex(cleanToken);
   const checksum = generateCursorChecksum(effectiveMachineId);
 

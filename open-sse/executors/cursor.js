@@ -9,8 +9,8 @@ import { estimateUsage } from "../utils/usageTracking.js";
 import { FORMATS } from "../translator/formats.js";
 import { buildCursorRequest } from "../translator/request/openai-to-cursor.js";
 import crypto from "crypto";
-import { v5 as uuidv5 } from "uuid";
-import zlib from "zlib";
+import uuid from "../utils/uuidShim.js";
+import zlib from "node:zlib";
 
 // Detect cloud environment
 const isCloudEnv = () => {
@@ -58,9 +58,9 @@ function createErrorResponse(jsonError) {
     || jsonError?.error?.details?.[0]?.debug?.details?.detail
     || jsonError?.error?.message
     || "API Error";
-  
+
   const isRateLimit = jsonError?.error?.code === "resource_exhausted";
-  
+
   return new Response(JSON.stringify({
     error: {
       message: errorMsg,
@@ -122,7 +122,7 @@ export class CursorExecutor extends BaseExecutor {
     return `${encoded}${machineId}`;
   }
 
-  buildHeaders(credentials) {
+  async buildHeaders(credentials) {
     const accessToken = credentials.accessToken;
     const machineId = credentials.providerSpecificData?.machineId;
     const ghostMode = credentials.providerSpecificData?.ghostMode !== false;
@@ -151,7 +151,7 @@ export class CursorExecutor extends BaseExecutor {
       "x-cursor-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       "x-ghost-mode": ghostMode ? "true" : "false",
       "x-request-id": crypto.randomUUID(),
-      "x-session-id": uuidv5(cleanToken, uuidv5.DNS),
+      "x-session-id": await uuid.v5(cleanToken, uuid.DNS),
     };
   }
 
@@ -229,11 +229,11 @@ export class CursorExecutor extends BaseExecutor {
 
   async execute({ model, body, stream, credentials, signal, log }) {
     const url = this.buildUrl();
-    const headers = this.buildHeaders(credentials);
+    const headers = await this.buildHeaders(credentials);
     const transformedBody = this.transformRequest(model, body, stream, credentials);
 
     try {
-      const response = http2 
+      const response = http2
         ? await this.makeHttp2Request(url, headers, transformedBody, signal)
         : await this.makeFetchRequest(url, headers, transformedBody, signal);
 
@@ -307,7 +307,7 @@ export class CursorExecutor extends BaseExecutor {
         if (text.startsWith("{") && text.includes('"error"')) {
           return createErrorResponse(JSON.parse(text));
         }
-      } catch {}
+      } catch { }
 
       const result = extractTextFromResponse(new Uint8Array(payload));
 
@@ -326,7 +326,7 @@ export class CursorExecutor extends BaseExecutor {
 
       if (result.toolCall) {
         const tc = result.toolCall;
-        
+
         if (toolCallsMap.has(tc.id)) {
           // Accumulate arguments for existing tool call
           const existing = toolCallsMap.get(tc.id);
@@ -336,7 +336,7 @@ export class CursorExecutor extends BaseExecutor {
           // New tool call
           toolCallsMap.set(tc.id, { ...tc });
         }
-        
+
         // Push to final array when isLast is true
         if (tc.isLast) {
           const finalToolCall = toolCallsMap.get(tc.id);
@@ -350,7 +350,7 @@ export class CursorExecutor extends BaseExecutor {
           });
         }
       }
-      
+
       if (result.text) totalContent += result.text;
     }
 
@@ -436,7 +436,7 @@ export class CursorExecutor extends BaseExecutor {
         if (text.startsWith("{") && text.includes('"error"')) {
           return createErrorResponse(JSON.parse(text));
         }
-      } catch {}
+      } catch { }
 
       const result = extractTextFromResponse(new Uint8Array(payload));
 
@@ -455,7 +455,7 @@ export class CursorExecutor extends BaseExecutor {
 
       if (result.toolCall) {
         const tc = result.toolCall;
-        
+
         if (chunks.length === 0) {
           chunks.push(`data: ${JSON.stringify({
             id: responseId,
@@ -469,14 +469,14 @@ export class CursorExecutor extends BaseExecutor {
             }]
           })}\n\n`);
         }
-        
+
         if (toolCallsMap.has(tc.id)) {
           // Accumulate arguments for existing tool call
           const existing = toolCallsMap.get(tc.id);
           const oldArgsLen = existing.function.arguments.length;
           existing.function.arguments += tc.function.arguments;
           existing.isLast = tc.isLast;
-          
+
           // Stream the delta arguments
           if (tc.function.arguments) {
             chunks.push(`data: ${JSON.stringify({
@@ -486,8 +486,8 @@ export class CursorExecutor extends BaseExecutor {
               model,
               choices: [{
                 index: 0,
-                delta: { 
-                  tool_calls: [{ 
+                delta: {
+                  tool_calls: [{
                     index: existing.index,
                     id: tc.id,
                     type: "function",
@@ -495,7 +495,7 @@ export class CursorExecutor extends BaseExecutor {
                       name: tc.function.name,
                       arguments: tc.function.arguments
                     }
-                  }] 
+                  }]
                 },
                 finish_reason: null
               }]
@@ -506,7 +506,7 @@ export class CursorExecutor extends BaseExecutor {
           const toolCallIndex = toolCalls.length;
           toolCalls.push({ ...tc, index: toolCallIndex });
           toolCallsMap.set(tc.id, { ...tc, index: toolCallIndex });
-          
+
           // Stream initial tool call with name
           chunks.push(`data: ${JSON.stringify({
             id: responseId,
@@ -515,8 +515,8 @@ export class CursorExecutor extends BaseExecutor {
             model,
             choices: [{
               index: 0,
-              delta: { 
-                tool_calls: [{ 
+              delta: {
+                tool_calls: [{
                   index: toolCallIndex,
                   id: tc.id,
                   type: "function",
@@ -524,7 +524,7 @@ export class CursorExecutor extends BaseExecutor {
                     name: tc.function.name,
                     arguments: tc.function.arguments
                   }
-                }] 
+                }]
               },
               finish_reason: null
             }]

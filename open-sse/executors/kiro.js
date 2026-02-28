@@ -1,6 +1,6 @@
 import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/constants.js";
-import { v4 as uuidv4 } from "uuid";
+import uuid from "../utils/uuidShim.js";
 import { refreshKiroToken } from "../services/tokenRefresh.js";
 
 /**
@@ -16,7 +16,7 @@ export class KiroExecutor extends BaseExecutor {
     const headers = {
       ...this.config.headers,
       "Amz-Sdk-Request": "attempt=1; max=3",
-      "Amz-Sdk-Invocation-Id": uuidv4()
+      "Amz-Sdk-Invocation-Id": uuid.v4()
     };
 
     if (credentials.accessToken) {
@@ -98,7 +98,7 @@ export class KiroExecutor extends BaseExecutor {
           if (!event) continue;
 
           const eventType = event.headers[":event-type"] || "";
-          
+
           // Track total content length for token estimation
           if (!state.totalContentLength) state.totalContentLength = 0;
           if (!state.contextUsagePercentage) state.contextUsagePercentage = 0;
@@ -107,7 +107,7 @@ export class KiroExecutor extends BaseExecutor {
           if (eventType === "assistantResponseEvent" && event.payload?.content) {
             const content = event.payload.content;
             state.totalContentLength += content.length;
-            
+
             const chunk = {
               id: responseId,
               object: "chat.completion.chunk",
@@ -259,7 +259,7 @@ export class KiroExecutor extends BaseExecutor {
             if (metrics && typeof metrics === 'object') {
               const inputTokens = metrics.inputTokens || 0;
               const outputTokens = metrics.outputTokens || 0;
-              
+
               if (inputTokens > 0 || outputTokens > 0) {
                 state.usage = {
                   prompt_tokens: inputTokens,
@@ -273,27 +273,27 @@ export class KiroExecutor extends BaseExecutor {
           // Emit final chunk only after receiving BOTH meteringEvent AND contextUsageEvent
           if (state.hasMeteringEvent && state.hasContextUsage && !state.finishEmitted) {
             state.finishEmitted = true;
-            
+
             // Estimate tokens if not available from events
             if (!state.usage) {
               // Estimate output tokens from content length
-              const estimatedOutputTokens = state.totalContentLength > 0 
+              const estimatedOutputTokens = state.totalContentLength > 0
                 ? Math.max(1, Math.floor(state.totalContentLength / 4))
                 : 0;
-              
+
               // Estimate input tokens from contextUsagePercentage
               // Kiro models typically have 200k context window
               const estimatedInputTokens = state.contextUsagePercentage > 0
                 ? Math.floor(state.contextUsagePercentage * 200000 / 100)
                 : 0;
-              
+
               state.usage = {
                 prompt_tokens: estimatedInputTokens,
                 completion_tokens: estimatedOutputTokens,
                 total_tokens: estimatedInputTokens + estimatedOutputTokens
               };
             }
-            
+
             const finishChunk = {
               id: responseId,
               object: "chat.completion.chunk",
@@ -305,12 +305,12 @@ export class KiroExecutor extends BaseExecutor {
                 finish_reason: state.hasToolCalls ? "tool_calls" : "stop"
               }]
             };
-            
+
             // Include usage in final chunk if available
             if (state.usage) {
               finishChunk.usage = state.usage;
             }
-            
+
             controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(finishChunk)}\n\n`));
           }
         }

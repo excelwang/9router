@@ -3,8 +3,7 @@
  * Implements ConnectRPC protobuf wire format for Cursor API
  */
 
-import { v4 as uuidv4 } from "uuid";
-import zlib from "zlib";
+import zlib from "node:zlib";
 
 const DEBUG = true;
 const log = (tag, ...args) => DEBUG && console.log(`[PROTOBUF:${tag}]`, ...args);
@@ -174,12 +173,12 @@ export function encodeField(fieldNum, wireType, value) {
   }
 
   if (wireType === WIRE_TYPE.LEN) {
-    const dataBytes = typeof value === "string" 
+    const dataBytes = typeof value === "string"
       ? new TextEncoder().encode(value)
       : value instanceof Uint8Array ? value
-      : Buffer.isBuffer(value) ? new Uint8Array(value)
-      : new Uint8Array(0);
-    
+        : Buffer.isBuffer(value) ? new Uint8Array(value)
+          : new Uint8Array(0);
+
     const lengthBytes = encodeVarint(dataBytes.length);
     return concatArrays(tagBytes, lengthBytes, dataBytes);
   }
@@ -389,7 +388,7 @@ export function encodeRequest(messages, modelName, tools = [], reasoningEffort =
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
     const role = msg.role === "user" ? ROLE.USER : ROLE.ASSISTANT;
-    const msgId = uuidv4();
+    const msgId = crypto.randomUUID();
     const isLast = i === messages.length - 1;
 
     formattedMessages.push({
@@ -412,12 +411,12 @@ export function encodeRequest(messages, modelName, tools = [], reasoningEffort =
   // Build request
   return concatArrays(
     // Messages
-    ...formattedMessages.map(fm => 
-      encodeField(FIELD.MESSAGES, WIRE_TYPE.LEN, 
+    ...formattedMessages.map(fm =>
+      encodeField(FIELD.MESSAGES, WIRE_TYPE.LEN,
         encodeMessage(fm.content, fm.role, fm.messageId, null, fm.isLast, fm.hasTools, fm.toolResults)
       )
     ),
-    
+
     // Static fields
     encodeField(FIELD.UNKNOWN_2, WIRE_TYPE.VARINT, 1),
     encodeField(FIELD.INSTRUCTION, WIRE_TYPE.LEN, encodeInstruction("")),
@@ -427,20 +426,20 @@ export function encodeRequest(messages, modelName, tools = [], reasoningEffort =
     encodeField(FIELD.UNKNOWN_13, WIRE_TYPE.VARINT, 1),
     encodeField(FIELD.CURSOR_SETTING, WIRE_TYPE.LEN, encodeCursorSetting()),
     encodeField(FIELD.UNKNOWN_19, WIRE_TYPE.VARINT, 1),
-    encodeField(FIELD.CONVERSATION_ID, WIRE_TYPE.LEN, uuidv4()),
+    encodeField(FIELD.CONVERSATION_ID, WIRE_TYPE.LEN, crypto.randomUUID()),
     encodeField(FIELD.METADATA, WIRE_TYPE.LEN, encodeMetadata()),
 
     // Tool-related fields
     encodeField(FIELD.IS_AGENTIC, WIRE_TYPE.VARINT, isAgentic ? 1 : 0),
     ...(isAgentic ? [encodeField(FIELD.SUPPORTED_TOOLS, WIRE_TYPE.LEN, encodeVarint(1))] : []),
-    
+
     // Message IDs
-    ...messageIds.map(mid => 
+    ...messageIds.map(mid =>
       encodeField(FIELD.MESSAGE_IDS, WIRE_TYPE.LEN, encodeMessageId(mid.messageId, mid.role))
     ),
 
     // MCP Tools
-    ...(tools?.length > 0 ? tools.map(tool => 
+    ...(tools?.length > 0 ? tools.map(tool =>
       encodeField(FIELD.MCP_TOOLS, WIRE_TYPE.LEN, encodeMcpTool(tool))
     ) : []),
 
@@ -479,8 +478,8 @@ export function buildToolResultRequest(toolResult) {
   const selectedTool = rawName.startsWith("mcp_custom_")
     ? rawName.slice("mcp_custom_".length)
     : rawName.startsWith("mcp_")
-    ? rawName.slice(4)
-    : rawName;
+      ? rawName.slice(4)
+      : rawName;
 
   // ClientSideToolV2Result per proto:
   //   field 1 (tool): varint = 19 (MCP)
@@ -522,10 +521,10 @@ export function wrapConnectRPCFrame(payload, compress = false) {
 
 export function generateCursorBody(messages, modelName, tools = [], reasoningEffort = null) {
   log("BODY", `Generating: ${messages.length} msgs, model=${modelName}, tools=${tools.length}, reasoning=${reasoningEffort || "none"}`);
-  
+
   const protobuf = buildChatRequest(messages, modelName, tools, reasoningEffort);
   const framed = wrapConnectRPCFrame(protobuf, false); // Cursor doesn't support compressed requests
-  
+
   log("BODY", `Protobuf=${protobuf.length}B, Framed=${framed.length}B`);
   return framed;
 }
@@ -653,14 +652,14 @@ function extractToolCall(toolCallData) {
   if (toolCall.has(FIELD.TOOL_MCP_PARAMS)) {
     try {
       const mcpParams = decodeMessage(toolCall.get(FIELD.TOOL_MCP_PARAMS)[0].value);
-      
+
       if (mcpParams.has(FIELD.MCP_TOOLS_LIST)) {
         const tool = decodeMessage(mcpParams.get(FIELD.MCP_TOOLS_LIST)[0].value);
-        
+
         if (tool.has(FIELD.MCP_NESTED_NAME)) {
           toolName = new TextDecoder().decode(tool.get(FIELD.MCP_NESTED_NAME)[0].value);
         }
-        
+
         if (tool.has(FIELD.MCP_NESTED_PARAMS)) {
           rawArgs = new TextDecoder().decode(tool.get(FIELD.MCP_NESTED_PARAMS)[0].value);
         }
@@ -731,7 +730,7 @@ export function extractTextFromResponse(payload) {
     // Field 2: StreamUnifiedChatResponse
     if (fields.has(FIELD.RESPONSE)) {
       const { text, thinking } = extractTextAndThinking(fields.get(FIELD.RESPONSE)[0].value);
-      
+
       if (text || thinking) {
         return { text, error: null, toolCall: null, thinking };
       }
