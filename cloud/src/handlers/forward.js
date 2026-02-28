@@ -39,9 +39,6 @@ export async function handleForward(request, env, machineId = null) {
     }
 
     // Set standard forwarding headers
-    cleanHeaders["X-Client-IP"] = clientIp;
-    cleanHeaders["X-Forwarded-Proto"] = url.protocol.replace(":", "");
-    cleanHeaders["X-Forwarded-Host"] = url.host;
     cleanHeaders["X-From-Worker"] = "1";
 
     console.log("[FORWARD] Target:", targetUrl);
