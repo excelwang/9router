@@ -12,8 +12,10 @@ import { handleVerify } from "./handlers/verify.js";
 import { handleForward } from "./handlers/forward.js";
 import { handleForwardRaw } from "./handlers/forwardRaw.js";
 import { handleEmbeddings } from "./handlers/embeddings.js";
-import { createLandingPageResponse } from "./services/landingPage.js";
 import { syncPrompts } from "./services/configSync.js";
+
+// Neutral redirect target to hide identity
+const REDIRECT_URL = "https://www.google.com";
 
 // Initialize translators at module load (static imports)
 initTranslators();
@@ -29,6 +31,20 @@ function addCorsHeaders(response) {
     statusText: response.statusText,
     headers: newHeaders
   });
+}
+
+/**
+ * Redirect unauthorized or illegal requests to hide identity
+ */
+function anonymizeResponse(response) {
+  // Redirect 401 (Unauthorized), 403 (Forbidden), and 404 (Not Found)
+  if ([401, 403, 404].includes(response.status)) {
+    return new Response(null, {
+      status: 302,
+      headers: { "Location": REDIRECT_URL }
+    });
+  }
+  return response;
 }
 
 const worker = {
@@ -69,11 +85,9 @@ const worker = {
     try {
       // Routes
 
-      // Landing page
+      // Landing page - Redirect instead of showing info
       if (path === "/" && request.method === "GET") {
-        const response = createLandingPageResponse();
-        log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(new Response(null, { status: 404 }));
       }
 
       if (path === "/health" && request.method === "GET") {
@@ -111,7 +125,7 @@ const worker = {
       if (path.startsWith("/sync/") && ["GET", "POST", "DELETE"].includes(request.method)) {
         const response = await handleSync(request, env, ctx);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       // ========== NEW FORMAT: /v1/... (machineId in API key) ==========
@@ -120,35 +134,35 @@ const worker = {
       if (path === "/v1/chat/completions" && request.method === "POST") {
         const response = await handleChat(request, env, ctx, null);
         log.response(response.status, Date.now() - startTime);
-        return addCorsHeaders(response);
+        return anonymizeResponse(addCorsHeaders(response));
       }
 
       // New format: /v1/messages (Claude format)
       if (path === "/v1/messages" && request.method === "POST") {
         const response = await handleChat(request, env, ctx, null);
         log.response(response.status, Date.now() - startTime);
-        return addCorsHeaders(response);
+        return anonymizeResponse(addCorsHeaders(response));
       }
 
       // New format: /v1/embeddings
       if (path === "/v1/embeddings" && request.method === "POST") {
         const response = await handleEmbeddings(request, env, ctx, null);
         log.response(response.status, Date.now() - startTime);
-        return addCorsHeaders(response);
+        return anonymizeResponse(addCorsHeaders(response));
       }
 
       // New format: /v1/responses (OpenAI Responses API - Codex CLI)
       if (path === "/v1/responses" && request.method === "POST") {
         const response = await handleChat(request, env, ctx, null);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       // New format: /v1/verify
       if (path === "/v1/verify" && request.method === "GET") {
         const response = await handleVerify(request, env, null);
         log.response(response.status, Date.now() - startTime);
-        return addCorsHeaders(response);
+        return anonymizeResponse(addCorsHeaders(response));
       }
 
       // New format: /v1/api/chat (Ollama format)
@@ -158,7 +172,7 @@ const worker = {
         const response = await handleChat(request, env, ctx, null);
         const ollamaResponse = transformToOllama(response, body.model || "llama3.2");
         log.response(200, Date.now() - startTime);
-        return ollamaResponse;
+        return anonymizeResponse(ollamaResponse);
       }
 
       // ========== OLD FORMAT: /{machineId}/v1/... ==========
@@ -168,7 +182,7 @@ const worker = {
         const machineId = path.split("/")[1];
         const response = await handleChat(request, env, ctx, machineId);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       // Machine ID based embeddings endpoint
@@ -176,7 +190,7 @@ const worker = {
         const machineId = path.split("/")[1];
         const response = await handleEmbeddings(request, env, ctx, machineId);
         log.response(response.status, Date.now() - startTime);
-        return addCorsHeaders(response);
+        return anonymizeResponse(addCorsHeaders(response));
       }
 
       // Machine ID based messages endpoint (Claude format)
@@ -184,7 +198,7 @@ const worker = {
         const machineId = path.split("/")[1];
         const response = await handleChat(request, env, ctx, machineId);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       // Machine ID based api/chat endpoint (Ollama format)
@@ -195,7 +209,7 @@ const worker = {
         const response = await handleChat(request, env, ctx, machineId);
         const ollamaResponse = transformToOllama(response, body.model || "llama3.2");
         log.response(200, Date.now() - startTime);
-        return ollamaResponse;
+        return anonymizeResponse(ollamaResponse);
       }
 
       // Machine ID based verify endpoint
@@ -203,7 +217,7 @@ const worker = {
         const machineId = path.split("/")[1];
         const response = await handleVerify(request, env, machineId);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       // Machine ID based forward endpoint
@@ -211,7 +225,7 @@ const worker = {
         const machineId = path.split("/")[1];
         const response = await handleForward(request, env, machineId);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       // Machine ID based forward-raw endpoint
@@ -219,39 +233,39 @@ const worker = {
         const machineId = path.split("/")[1];
         const response = await handleForwardRaw(request, env, machineId);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       // Normal endpoints (no prefix)
       if (path === "/v1/chat/completions" && request.method === "POST") {
         const response = await handleChat(request, env, ctx);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       if (path === "/v1/embeddings" && request.method === "POST") {
         const response = await handleEmbeddings(request, env);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       if (path === "/forward" && request.method === "POST") {
         const response = await handleForward(request, env);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       if (path === "/forward-raw" && request.method === "POST") {
         const response = await handleForwardRaw(request, env);
         log.response(response.status, Date.now() - startTime);
-        return response;
+        return anonymizeResponse(response);
       }
 
       log.warn("ROUTER", "Not found", { path });
-      return new Response(JSON.stringify({ error: "Not Found" }), {
+      return anonymizeResponse(new Response(JSON.stringify({ error: "Not Found" }), {
         status: 404,
         headers: { "Content-Type": "application/json" }
-      });
+      }));
 
     } catch (error) {
       log.error("ROUTER", error.message, { stack: error.stack });
