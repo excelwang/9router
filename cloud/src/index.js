@@ -97,6 +97,24 @@ const worker = {
         });
       }
 
+      // Diagnostics info (Colo, IP, Geography)
+      if (path === "/v1/info" && request.method === "GET") {
+        const cf = request.cf || {};
+        const info = {
+          colo: cf.colo || "Unknown",
+          country: cf.country || "Unknown",
+          city: cf.city || "Unknown",
+          timezone: cf.timezone || "Unknown",
+          continent: cf.continent || "Unknown",
+          clientIp: request.headers.get("CF-Connecting-IP") || "Unknown",
+          asOrganization: cf.asOrganization || "Unknown"
+        };
+        log.response(200, Date.now() - startTime);
+        return new Response(JSON.stringify(info, null, 2), {
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+
       // Ollama compatible - list models
       if (path === "/api/tags" && request.method === "GET") {
         log.response(200, Date.now() - startTime);
