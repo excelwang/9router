@@ -206,14 +206,41 @@ const worker = {
         return response;
       }
 
-      // Forward request to any endpoint
+      // Machine ID based forward endpoint
+      if (path.match(/^\/[^\/]+\/forward$/) && request.method === "POST") {
+        const machineId = path.split("/")[1];
+        const response = await handleForward(request, env, machineId);
+        log.response(response.status, Date.now() - startTime);
+        return response;
+      }
+
+      // Machine ID based forward-raw endpoint
+      if (path.match(/^\/[^\/]+\/forward-raw$/) && request.method === "POST") {
+        const machineId = path.split("/")[1];
+        const response = await handleForwardRaw(request, env, machineId);
+        log.response(response.status, Date.now() - startTime);
+        return response;
+      }
+
+      // Normal endpoints (no prefix)
+      if (path === "/v1/chat/completions" && request.method === "POST") {
+        const response = await handleChat(request, env, ctx);
+        log.response(response.status, Date.now() - startTime);
+        return response;
+      }
+
+      if (path === "/v1/embeddings" && request.method === "POST") {
+        const response = await handleEmbeddings(request, env);
+        log.response(response.status, Date.now() - startTime);
+        return response;
+      }
+
       if (path === "/forward" && request.method === "POST") {
         const response = await handleForward(request, env);
         log.response(response.status, Date.now() - startTime);
         return response;
       }
 
-      // Forward request via raw TCP socket (bypasses CF auto headers)
       if (path === "/forward-raw" && request.method === "POST") {
         const response = await handleForwardRaw(request, env);
         log.response(response.status, Date.now() - startTime);

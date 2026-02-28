@@ -8,10 +8,10 @@ const CF_HEADERS = [
 ];
 
 // Forward request to any endpoint
-export async function handleForward(request, env) {
+export async function handleForward(request, env, machineId = null) {
   try {
     // Authenticate request
-    const auth = await authenticateRequest(request, env);
+    const auth = await authenticateRequest(request, env, machineId);
     if (auth.error) {
       return new Response(JSON.stringify({ error: auth.error }), {
         status: auth.status,

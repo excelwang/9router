@@ -2,10 +2,10 @@ import { connect } from "cloudflare:sockets";
 import { authenticateRequest } from "../utils/apiKey.js";
 
 // Forward request via raw TCP socket (bypasses CF auto headers)
-export async function handleForwardRaw(request, env) {
+export async function handleForwardRaw(request, env, machineId = null) {
   try {
     // Authenticate request
-    const auth = await authenticateRequest(request, env);
+    const auth = await authenticateRequest(request, env, machineId);
     if (auth.error) {
       return new Response(JSON.stringify({ error: auth.error }), {
         status: auth.status,
