@@ -1,10 +1,20 @@
 import { connect } from "cloudflare:sockets";
+import { authenticateRequest } from "../utils/apiKey.js";
 
 // Forward request via raw TCP socket (bypasses CF auto headers)
-export async function handleForwardRaw(request) {
+export async function handleForwardRaw(request, env) {
   try {
+    // Authenticate request
+    const auth = await authenticateRequest(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     const { targetUrl, headers = {}, body } = await request.json();
-    
+
     if (!targetUrl) {
       return new Response(JSON.stringify({ error: "targetUrl is required" }), {
         status: 400,
@@ -25,8 +35,8 @@ export async function handleForwardRaw(request) {
     if (isHttps) {
       // For HTTPS, connect directly with TLS enabled
       console.log("[FORWARD_RAW] Creating TLS socket...");
-      secureSocket = connect({ 
-        hostname: host, 
+      secureSocket = connect({
+        hostname: host,
         port: parseInt(port),
         secureTransport: "on"
       });
@@ -37,7 +47,7 @@ export async function handleForwardRaw(request) {
 
     console.log("[FORWARD_RAW] Socket object:", secureSocket);
     console.log("[FORWARD_RAW] Socket opened:", secureSocket.opened);
-    
+
     // Wait for socket to be ready
     try {
       console.log("[FORWARD_RAW] Waiting for socket to open...");
@@ -90,7 +100,7 @@ export async function handleForwardRaw(request) {
     let responseData = new Uint8Array(0);
     let attempts = 0;
     const maxAttempts = 100; // 10 seconds max
-    
+
     while (attempts < maxAttempts) {
       console.log("[FORWARD_RAW] Reading attempt:", attempts);
       const { done, value } = await reader.read();
@@ -101,7 +111,7 @@ export async function handleForwardRaw(request) {
         newData.set(responseData);
         newData.set(value, responseData.length);
         responseData = newData;
-        
+
         // Check if we have complete response (has headers end marker)
         const text = new TextDecoder().decode(responseData);
         if (text.includes("\r\n\r\n")) {
@@ -121,7 +131,7 @@ export async function handleForwardRaw(request) {
       }
       attempts++;
     }
-    
+
     console.log("[FORWARD_RAW] Read loop finished, total bytes:", responseData.length);
 
     const responseText = new TextDecoder().decode(responseData);

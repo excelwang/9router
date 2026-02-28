@@ -1,3 +1,5 @@
+import { authenticateRequest } from "../utils/apiKey.js";
+
 // CF headers to remove
 const CF_HEADERS = [
   "cf-connecting-ip", "cf-connecting-ip6", "cf-ray", "cf-visitor",
@@ -6,12 +8,21 @@ const CF_HEADERS = [
 ];
 
 // Forward request to any endpoint
-export async function handleForward(request) {
+export async function handleForward(request, env) {
   try {
+    // Authenticate request
+    const auth = await authenticateRequest(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     const url = new URL(request.url);
     const clientIp = request.headers.get("CF-Connecting-IP") || "";
     const { targetUrl, headers = {}, body } = await request.json();
-    
+
     if (!targetUrl) {
       return new Response(JSON.stringify({ error: "targetUrl is required" }), {
         status: 400,

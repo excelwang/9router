@@ -1,5 +1,6 @@
 import * as log from "../utils/logger.js";
 import { getMachineData, saveMachineData, deleteMachineData } from "../services/storage.js";
+import { authenticateRequest } from "../utils/apiKey.js";
 
 const CORS_HEADERS = {
   "Content-Type": "application/json",
@@ -27,6 +28,13 @@ export async function handleSync(request, env, ctx) {
   if (!machineId) {
     log.warn("SYNC", "Missing machineId in path");
     return jsonResponse({ error: "Missing machineId" }, 400);
+  }
+
+  // Authenticate: Ensure API key is valid for this machineId
+  const auth = await authenticateRequest(request, env, machineId);
+  if (auth.error) {
+    log.warn("SYNC", `Unauthorized: ${auth.error}`, { machineId });
+    return jsonResponse({ error: auth.error }, auth.status);
   }
 
   // Route by method
@@ -151,7 +159,7 @@ function mergeProvider(webProvider, workerProvider, changes, providerId) {
   const workerTime = new Date(workerProvider.updatedAt || 0).getTime();
 
   let merged;
-  
+
   if (workerTime > webTime) {
     // Cloud has newer data - use entire Cloud provider
     merged = formatProviderData(workerProvider);

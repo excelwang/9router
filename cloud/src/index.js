@@ -64,7 +64,7 @@ const worker = {
 
     try {
       // Routes
-      
+
       // Landing page
       if (path === "/" && request.method === "GET") {
         const response = createLandingPageResponse();
@@ -101,7 +101,7 @@ const worker = {
       }
 
       // ========== NEW FORMAT: /v1/... (machineId in API key) ==========
-      
+
       // New format: /v1/chat/completions
       if (path === "/v1/chat/completions" && request.method === "POST") {
         const response = await handleChat(request, env, ctx, null);
@@ -201,14 +201,14 @@ const worker = {
 
       // Forward request to any endpoint
       if (path === "/forward" && request.method === "POST") {
-        const response = await handleForward(request);
+        const response = await handleForward(request, env);
         log.response(response.status, Date.now() - startTime);
         return response;
       }
 
       // Forward request via raw TCP socket (bypasses CF auto headers)
       if (path === "/forward-raw" && request.method === "POST") {
-        const response = await handleForwardRaw(request);
+        const response = await handleForwardRaw(request, env);
         log.response(response.status, Date.now() - startTime);
         return response;
       }

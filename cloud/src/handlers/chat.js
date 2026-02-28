@@ -6,7 +6,7 @@ import { getComboModelsFromData, handleComboChat } from "open-sse/services/combo
 import { HTTP_STATUS } from "open-sse/config/constants.js";
 import * as log from "../utils/logger.js";
 import { refreshTokenByProvider } from "../services/tokenRefresh.js";
-import { parseApiKey, extractBearerToken } from "../utils/apiKey.js";
+import { parseApiKey, extractBearerToken, authenticateRequest } from "../utils/apiKey.js";
 import { getMachineData, saveMachineData } from "../services/storage.js";
 
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -34,27 +34,9 @@ export async function handleChat(request, env, ctx, machineIdOverride = null) {
     });
   }
 
-  // Determine machineId: from URL (old) or from API key (new)
-  let machineId = machineIdOverride;
-  
-  if (!machineId) {
-    // New format: extract machineId from API key
-    const apiKey = extractBearerToken(request);
-    if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
-    
-    const parsed = await parseApiKey(apiKey);
-    if (!parsed) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key format");
-    
-    if (!parsed.isNewFormat || !parsed.machineId) {
-      return errorResponse(HTTP_STATUS.BAD_REQUEST, "API key does not contain machineId. Use /{machineId}/v1/... endpoint for old format keys.");
-    }
-    
-    machineId = parsed.machineId;
-  }
-
-  if (!await validateApiKey(request, machineId, env)) {
-    return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
-  }
+  const auth = await authenticateRequest(request, env, machineIdOverride);
+  if (auth.error) return errorResponse(auth.status, auth.error);
+  machineId = auth.machineId;
 
   let body;
   try {
@@ -71,7 +53,7 @@ export async function handleChat(request, env, ctx, machineIdOverride = null) {
   // Check if model is a combo
   const data = await getMachineData(machineId, env);
   const comboModels = getComboModelsFromData(modelStr, data?.combos || []);
-  
+
   if (comboModels) {
     log.info("COMBO", `"${modelStr}" with ${comboModels.length} models`);
     return handleComboChat({
@@ -127,7 +109,7 @@ async function handleSingleModelChat(body, modelStr, machineId, env) {
     log.debug("CHAT", `account=${credentials.id}`, { provider });
 
     const refreshedCredentials = await checkAndRefreshToken(machineId, provider, credentials, env);
-    
+
     // Use shared chatCore
     const result = await handleChatCore({
       body,
@@ -184,14 +166,6 @@ async function checkAndRefreshToken(machineId, provider, credentials, env) {
   return credentials;
 }
 
-async function validateApiKey(request, machineId, env) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return false;
-
-  const apiKey = authHeader.slice(7);
-  const data = await getMachineData(machineId, env);
-  return data?.apiKeys?.some(k => k.key === apiKey) || false;
-}
 
 async function getProviderCredentials(machineId, provider, env, excludeConnectionId = null) {
   const data = await getMachineData(machineId, env);
@@ -269,9 +243,9 @@ async function markAccountUnavailable(machineId, connectionId, status, errorText
 async function clearAccountError(machineId, connectionId, currentCredentials, env) {
   // Only update if currently has error status (optimization)
   const hasError = currentCredentials.status === "unavailable" ||
-                   currentCredentials.lastError ||
-                   currentCredentials.rateLimitedUntil;
-  
+    currentCredentials.lastError ||
+    currentCredentials.rateLimitedUntil;
+
   if (!hasError) return; // Skip if already clean
 
   const data = await getMachineData(machineId, env);

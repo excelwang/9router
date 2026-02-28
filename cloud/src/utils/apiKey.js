@@ -1,3 +1,5 @@
+import { getMachineData } from "../services/storage.js";
+
 /**
  * API Key utilities for Worker
  * Supports both formats:
@@ -68,5 +70,38 @@ export function extractBearerToken(request) {
   const authHeader = request.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   return authHeader.slice(7);
+}
+
+/**
+ * Authenticate request and return machineId
+ * @param {Request} request
+ * @param {Object} env
+ * @param {string|null} machineIdOverride - machineId from URL (optional)
+ * @returns {Promise<{ machineId: string, apiKey: string } | { error: string, status: number }>}
+ */
+export async function authenticateRequest(request, env, machineIdOverride = null) {
+  const apiKey = extractBearerToken(request);
+  if (!apiKey) return { error: "Missing API key", status: 401 };
+
+  let machineId = machineIdOverride;
+  if (!machineId) {
+    const parsed = await parseApiKey(apiKey);
+    if (!parsed) return { error: "Invalid API key format", status: 401 };
+    
+    if (!parsed.isNewFormat || !parsed.machineId) {
+      return { 
+        error: "API key does not contain machineId. Use /{machineId}/v1/... endpoint for old format keys.", 
+        status: 400 
+      };
+    }
+    machineId = parsed.machineId;
+  }
+
+  const data = await getMachineData(machineId, env);
+  const isValid = data?.apiKeys?.some(k => k.key === apiKey) || false;
+  
+  if (!isValid) return { error: "Invalid API key", status: 401 };
+
+  return { machineId, apiKey };
 }
 
