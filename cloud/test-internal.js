@@ -53,7 +53,13 @@ async function testPromptSync() {
 
     const result = await syncPrompts(env);
     assert.strictEqual(result.success, true, 'Sync should succeed');
-    assert.strictEqual(env.KV.put.mock.calls[0].arguments[1], 'New Remote Prompt', 'KV should be updated with new prompt');
+
+    const updatedPrompt = env.KV.put.mock.calls[0].arguments[1];
+    assert.strictEqual(updatedPrompt, 'New Remote Prompt', 'KV should be updated with new prompt');
+
+    console.log('\n--- DEBUG: Official Prompt Content ---');
+    console.log(updatedPrompt);
+    console.log('--------------------------------------\n');
 
     console.log('Prompt Sync check passed');
 }
