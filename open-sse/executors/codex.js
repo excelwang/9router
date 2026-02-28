@@ -39,7 +39,7 @@ export class CodexExecutor extends BaseExecutor {
 
     // If no instructions provided, inject default Codex instructions
     if (!body.instructions || body.instructions.trim() === "") {
-      body.instructions = CODEX_DEFAULT_INSTRUCTIONS;
+      body.instructions = credentials?.providerSpecificData?.instructions || CODEX_DEFAULT_INSTRUCTIONS;
     }
 
     // Ensure store is false (Codex requirement)
