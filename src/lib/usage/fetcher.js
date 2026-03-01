@@ -21,6 +21,7 @@ export async function getUsageForProvider(connection) {
       return await getAntigravityUsage(accessToken);
     case "claude":
       return await getClaudeUsage(accessToken);
+    case "openai":
     case "codex":
       return await getCodexUsage(accessToken);
     case "qwen":
@@ -76,7 +77,7 @@ async function getGitHubUsage(accessToken, providerSpecificData) {
       // Free/limited plan format
       const monthlyQuotas = data.monthly_quotas || {};
       const usedQuotas = data.limited_user_quotas || {};
-      
+
       return {
         plan: data.copilot_plan || data.access_type_sku,
         resetDate: data.limited_user_reset_date,
@@ -103,7 +104,7 @@ async function getGitHubUsage(accessToken, providerSpecificData) {
 
 function formatGitHubQuotaSnapshot(quota) {
   if (!quota) return { used: 0, total: 0, unlimited: true };
-  
+
   return {
     used: quota.entitlement - quota.remaining,
     total: quota.entitlement,
@@ -166,14 +167,48 @@ async function getClaudeUsage(accessToken) {
 }
 
 /**
- * Codex (OpenAI) Usage
+ * OpenAI (Codex) Usage and Balance
  */
 async function getCodexUsage(accessToken) {
   try {
-    // OpenAI usage requires organization API access
-    return { message: "Codex connected. Check OpenAI dashboard for usage." };
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    };
+
+    // 1. Get Subscription (Limits & Plan)
+    const subRes = await fetch("https://api.openai.com/v1/dashboard/billing/subscription", { headers });
+    if (!subRes.ok) throw new Error("Failed to fetch subscription");
+    const subData = await subRes.json();
+
+    // 2. Get Usage (Current Month)
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+    const endDate = now.toISOString().split("T")[0]; // Use current day as end date
+
+    const usageRes = await fetch(`https://api.openai.com/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, { headers });
+    if (!usageRes.ok) throw new Error("Failed to fetch usage");
+    const usageData = await usageRes.json();
+
+    const hardLimit = subData.hard_limit_usd || 0;
+    const totalUsage = (usageData.total_usage || 0) / 100; // API returns cents
+
+    return {
+      plan: subData.plan?.title || (subData.has_payment_method ? "Pay-as-you-go" : "Free Trial"),
+      resetDate: subData.access_until ? new Date(subData.access_until * 1000).toLocaleDateString() : "N/A",
+      quotas: {
+        balance: {
+          used: totalUsage,
+          total: hardLimit,
+          remaining: Math.max(0, hardLimit - totalUsage),
+          unit: "USD",
+          unlimited: false,
+        }
+      },
+      raw: { subscription: subData, usage: usageData }
+    };
   } catch (error) {
-    return { message: "Unable to fetch Codex usage." };
+    return { message: `OpenAI Balance Error: ${error.message}` };
   }
 }
 

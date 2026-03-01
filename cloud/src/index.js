@@ -17,6 +17,10 @@ import { syncPrompts } from "./services/configSync.js";
 // Neutral redirect target to hide identity
 const REDIRECT_URL = "https://www.google.com";
 
+// ISO-3166-1 alpha-2 country codes blocked by OpenAI
+// China, Hong Kong, Macao, Iran, North Korea, Syria, Russia, Cuba
+const BLOCKED_COUNTRIES = ["CN", "HK", "MO", "IR", "KP", "SY", "RU", "CU"];
+
 // Initialize translators at module load (static imports)
 initTranslators();
 
@@ -83,6 +87,22 @@ const worker = {
     }
 
     try {
+      // Geo-Blocking for unsupported regions to prevent OpenAI API bans
+      // Allow /v1/info and /health for diagnostics
+      if (request.cf && path !== "/v1/info" && path !== "/health") {
+        const country = request.cf.country;
+        const colo = request.cf.colo;
+
+        if (BLOCKED_COUNTRIES.includes(country) || colo === "HKG") {
+          log.warn("GEO_BLOCK", `Request blocked`, { country, colo, ip: request.headers.get("CF-Connecting-IP") });
+          // Return a beautifully generic error so scanners don't know it's an AI proxy
+          return new Response("403 Forbidden\n\nCloudflare", {
+            status: 403,
+            headers: { "Content-Type": "text/plain" }
+          });
+        }
+      }
+
       // Routes
 
       // Landing page - Redirect instead of showing info

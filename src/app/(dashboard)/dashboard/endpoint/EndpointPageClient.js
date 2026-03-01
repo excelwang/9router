@@ -5,10 +5,8 @@ import PropTypes from "prop-types";
 import { Card, Button, Input, Modal, CardSkeleton, Toggle } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 
-/* ========== CLOUD CODE — COMMENTED OUT (replaced by Tunnel) ==========
 const DEFAULT_CLOUD_URL = process.env.NEXT_PUBLIC_CLOUD_URL || "";
 const CLOUD_ACTION_TIMEOUT_MS = 15000;
-========== END CLOUD CODE ========== */
 
 const TUNNEL_BENEFITS = [
   { icon: "public", title: "Access Anywhere", desc: "Use your API from any network" },
@@ -26,19 +24,18 @@ export default function APIPageClient({ machineId }) {
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState(null);
 
-  /* ========== CLOUD STATE — COMMENTED OUT (replaced by Tunnel) ==========
+  // Cloud state
   const [cloudEnabled, setCloudEnabled] = useState(false);
   const [cloudUrl, setCloudUrl] = useState(DEFAULT_CLOUD_URL);
   const [cloudUrlInput, setCloudUrlInput] = useState(DEFAULT_CLOUD_URL);
   const [cloudUrlSaving, setCloudUrlSaving] = useState(false);
   const [showCloudModal, setShowCloudModal] = useState(false);
-  const [showDisableModal, setShowDisableModal] = useState(false);
+  const [showCloudDisableModal, setShowCloudDisableModal] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [setupStatus, setSetupStatus] = useState(null);
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [cloudStatus, setCloudStatus] = useState(null);
   const [syncStep, setSyncStep] = useState("");
-  ========== END CLOUD STATE ========== */
 
   // Tunnel state
   const [requireApiKey, setRequireApiKey] = useState(false);
@@ -60,7 +57,6 @@ export default function APIPageClient({ machineId }) {
     loadSettings();
   }, []);
 
-  /* ========== CLOUD FUNCTIONS — COMMENTED OUT (replaced by Tunnel) ==========
   const postCloudAction = async (action, timeoutMs = CLOUD_ACTION_TIMEOUT_MS) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -83,27 +79,11 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
-  const loadCloudSettings = async () => {
-    try {
-      const res = await fetch("/api/settings");
-      if (res.ok) {
-        const data = await res.json();
-        setCloudEnabled(data.cloudEnabled || false);
-        setRequireApiKey(data.requireApiKey || false);
-        const url = data.cloudUrl || DEFAULT_CLOUD_URL;
-        setCloudUrl(url);
-        setCloudUrlInput(url);
-      }
-    } catch (error) {
-      console.log("Error loading cloud settings:", error);
-    }
-  };
-
   const handleCloudToggle = (checked) => {
     if (checked) {
       setShowCloudModal(true);
     } else {
-      setShowDisableModal(true);
+      setShowCloudDisableModal(true);
     }
   };
 
@@ -145,7 +125,7 @@ export default function APIPageClient({ machineId }) {
       if (ok) {
         setCloudEnabled(false);
         setCloudStatus({ type: "success", message: "Cloud disabled" });
-        setShowDisableModal(false);
+        setShowCloudDisableModal(false);
       } else {
         setCloudStatus({ type: "error", message: data.error || "Failed to disable cloud" });
       }
@@ -210,7 +190,6 @@ export default function APIPageClient({ machineId }) {
       setCloudSyncing(false);
     }
   };
-  ========== END CLOUD FUNCTIONS ========== */
 
   const loadSettings = async () => {
     try {
@@ -221,6 +200,10 @@ export default function APIPageClient({ machineId }) {
       if (settingsRes.ok) {
         const data = await settingsRes.json();
         setRequireApiKey(data.requireApiKey || false);
+        setCloudEnabled(data.cloudEnabled || false);
+        const url = data.cloudUrl || DEFAULT_CLOUD_URL;
+        setCloudUrl(url);
+        setCloudUrlInput(url);
       }
       if (tunnelRes.ok) {
         const data = await tunnelRes.json();
@@ -459,9 +442,9 @@ export default function APIPageClient({ machineId }) {
 
         {/* Endpoint URL */}
         <div className="flex gap-2">
-          <Input 
-            value={currentEndpoint} 
-            readOnly 
+          <Input
+            value={currentEndpoint}
+            readOnly
             className={`flex-1 font-mono text-sm ${tunnelEnabled ? "animate-border-glow" : ""}`}
           />
           <Button
@@ -475,12 +458,85 @@ export default function APIPageClient({ machineId }) {
 
         {/* Tunnel Status */}
         {tunnelStatus && (
-          <div className={`mt-3 p-2 rounded text-sm ${
-            tunnelStatus.type === "success" ? "bg-green-500/10 text-green-600 dark:text-green-400" :
-            tunnelStatus.type === "warning" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" :
-            "bg-red-500/10 text-red-600 dark:text-red-400"
-          }`}>
+          <div className={`mt-3 p-2 rounded text-sm ${tunnelStatus.type === "success" ? "bg-green-500/10 text-green-600 dark:text-green-400" :
+              tunnelStatus.type === "warning" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" :
+                "bg-red-500/10 text-red-600 dark:text-red-400"
+            }`}>
             {tunnelStatus.message}
+          </div>
+        )}
+      </Card>
+
+      {/* Cloud Proxy Card */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Cloud Proxy (Worker)</h2>
+            <p className="text-sm text-text-muted">
+              {cloudEnabled ? "Active & Syncing" : "Cloud Sync Disabled"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon="settings"
+              onClick={() => setShowSetupModal(true)}
+            >
+              Setup Cloudflare
+            </Button>
+            {cloudEnabled ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="cloud_off"
+                onClick={() => handleCloudToggle(false)}
+                disabled={cloudSyncing}
+                className="bg-red-500/10! text-red-500! hover:bg-red-500/20! border-red-500/30!"
+              >
+                Disable Cloud
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                icon="cloud_upload"
+                onClick={() => handleCloudToggle(true)}
+                disabled={cloudSyncing || !cloudUrl}
+                className="bg-linear-to-r from-primary to-blue-500 hover:from-primary-hover hover:to-blue-600"
+              >
+                Enable Cloud
+              </Button>
+            )}
+            {cloudEnabled && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="sync"
+                onClick={handleSyncCloud}
+                disabled={cloudSyncing}
+              >
+                {cloudSyncing ? "Syncing..." : "Sync Now"}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Cloud Endpoints */}
+        <div className="flex gap-2">
+          <Input
+            value={cloudEnabled && cloudUrl ? `${cloudUrl}/v1` : "Not Configured"}
+            readOnly
+            className={`flex-1 font-mono text-sm ${cloudEnabled ? "animate-border-glow" : "opacity-50"}`}
+          />
+        </div>
+
+        {/* Cloud Status */}
+        {cloudStatus && (
+          <div className={`mt-3 p-2 rounded text-sm ${cloudStatus.type === "success" ? "bg-green-500/10 text-green-600 dark:text-green-400" :
+              cloudStatus.type === "warning" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" :
+                "bg-red-500/10 text-red-600 dark:text-red-400"
+            }`}>
+            {cloudStatus.message}
           </div>
         )}
       </Card>
@@ -584,9 +640,184 @@ export default function APIPageClient({ machineId }) {
         )}
       </Card>
 
-      {/* CLOUD MODALS — COMMENTED OUT (replaced by Tunnel) */}
-      {/* Setup Cloud Modal — removed */}
-      {/* Cloud Enable Modal — removed */}
+      {/* Setup Cloud Modal */}
+      <Modal
+        isOpen={showSetupModal}
+        title="Setup Cloudflare Worker"
+        onClose={() => { setShowSetupModal(false); setSetupStatus(null); }}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              <code className="font-semibold">https://9router.com</code> is a pre-configured worker ready to use. You can also deploy your own.
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-medium mb-2">Worker URL</p>
+            <div className="flex gap-2">
+              <Input
+                value={cloudUrlInput}
+                onChange={(e) => setCloudUrlInput(e.target.value)}
+                placeholder="https://9router.your-subdomain.workers.dev"
+                className="flex-1 font-mono text-sm"
+              />
+            </div>
+            <p className="text-xs text-text-muted mt-2">
+              Deploy your own worker from <code className="text-xs bg-sidebar px-1 py-0.5 rounded">app/cloud/</code> directory.{" "}
+              <a href="https://github.com/decolua/9router/tree/main/app/cloud" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                Setup guide →
+              </a>
+            </p>
+          </div>
+
+          {/* Status in modal */}
+          {setupStatus && (
+            <div className={`p-2 rounded text-sm ${setupStatus.type === "success" ? "bg-green-500/10 text-green-600 dark:text-green-400" :
+                "bg-red-500/10 text-red-600 dark:text-red-400"
+              }`}>
+              {setupStatus.message}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              onClick={handleSaveCloudUrl}
+              fullWidth
+              disabled={cloudUrlSaving || !cloudUrlInput.trim() || cloudUrlInput.trim().replace(/\/v1\/?$/, "").replace(/\/+$/, "") === cloudUrl}
+            >
+              {cloudUrlSaving ? "Saving..." : "Save"}
+            </Button>
+            <Button
+              onClick={handleCheckCloud}
+              variant="secondary"
+              fullWidth
+              disabled={cloudSyncing || !cloudUrl}
+              icon="check_circle"
+            >
+              {cloudSyncing ? "Checking..." : "Check"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Cloud Enable Modal */}
+      <Modal
+        isOpen={showCloudModal}
+        title="Enable Cloud Proxy"
+        onClose={() => setShowCloudModal(false)}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <p className="text-sm text-blue-800 dark:text-blue-200 font-medium mb-2">
+              What you will get
+            </p>
+            <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+              <li>• Access your API from anywhere in the world</li>
+              <li>• Share endpoint with your team easily</li>
+              <li>• No need to open ports or configure firewall</li>
+              <li>• Fast global edge network</li>
+            </ul>
+          </div>
+
+          {/* Sync Progress */}
+          {cloudSyncing && (
+            <div className="flex items-center gap-3 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+              <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-primary">
+                  {syncStep === "syncing" && "Syncing data to cloud..."}
+                  {syncStep === "verifying" && "Verifying connection..."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              onClick={handleEnableCloud}
+              fullWidth
+              disabled={cloudSyncing}
+            >
+              {cloudSyncing ? (
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                  {syncStep === "syncing" ? "Syncing..." : "Verifying..."}
+                </span>
+              ) : "Enable Cloud"}
+            </Button>
+            <Button
+              onClick={() => setShowCloudModal(false)}
+              variant="ghost"
+              fullWidth
+              disabled={cloudSyncing}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Cloud Disable Modal */}
+      <Modal
+        isOpen={showCloudDisableModal}
+        title="Disable Cloud Proxy"
+        onClose={() => !cloudSyncing && setShowCloudDisableModal(false)}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-red-600 dark:text-red-400">warning</span>
+              <div>
+                <p className="text-sm text-red-800 dark:text-red-200 font-medium mb-1">
+                  Warning
+                </p>
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  All auth sessions will be deleted from cloud.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Sync Progress */}
+          {cloudSyncing && (
+            <div className="flex items-center gap-3 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+              <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-primary">
+                  {syncStep === "syncing" && "Syncing latest data..."}
+                  {syncStep === "disabling" && "Disabling cloud..."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <p className="text-sm text-text-muted">Are you sure you want to disable cloud proxy?</p>
+
+          <div className="flex gap-2">
+            <Button
+              onClick={handleConfirmDisable}
+              fullWidth
+              disabled={cloudSyncing}
+              className="bg-red-500! hover:bg-red-600! text-white!"
+            >
+              {cloudSyncing ? (
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                  {syncStep === "syncing" ? "Syncing..." : "Disabling..."}
+                </span>
+              ) : "Disable Cloud"}
+            </Button>
+            <Button
+              onClick={() => setShowCloudDisableModal(false)}
+              variant="ghost"
+              fullWidth
+              disabled={cloudSyncing}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Add Key Modal */}
       <Modal

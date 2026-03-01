@@ -82,11 +82,12 @@ export async function authenticateRequest(request, env, machineIdOverride = null
   const apiKey = extractBearerToken(request);
   if (!apiKey) return { error: "Missing API key", status: 401 };
 
+  // 1. Verify cryptographic signature of the key (solves first-sync problem)
+  const parsed = await parseApiKey(apiKey, env.API_KEY_SECRET);
+  if (!parsed) return { error: "Invalid API key format or signature", status: 401 };
+
   let machineId = machineIdOverride;
   if (!machineId) {
-    const parsed = await parseApiKey(apiKey, env.API_KEY_SECRET);
-    if (!parsed) return { error: "Invalid API key format", status: 401 };
-
     if (!parsed.isNewFormat || !parsed.machineId) {
       return {
         error: "API key does not contain machineId. Use /{machineId}/v1/... endpoint for old format keys.",
@@ -94,12 +95,24 @@ export async function authenticateRequest(request, env, machineIdOverride = null
       };
     }
     machineId = parsed.machineId;
+  } else {
+    // 2. Prevent machine ID spoofing when override provided
+    if (parsed.isNewFormat && parsed.machineId !== machineId) {
+      return { error: "API key machineId mismatch", status: 403 };
+    }
   }
 
+  // 3. Database Check
   const data = await getMachineData(machineId, env);
-  const isValid = data?.apiKeys?.some(k => k.key === apiKey) || false;
 
-  if (!isValid) return { error: "Invalid API key", status: 401 };
+  // If DB is completely empty for this machine, allow first sync since cryptographic signature is valid!
+  if (!data || !data.apiKeys || data.apiKeys.length === 0) {
+    return { machineId, apiKey };
+  }
+
+  // If machine has keys, ensure this specific key wasn't deleted/paused
+  const isValid = data.apiKeys.some(k => k.key === apiKey);
+  if (!isValid) return { error: "Invalid API key or key revoked", status: 401 };
 
   return { machineId, apiKey };
 }
